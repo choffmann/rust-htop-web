@@ -1,4 +1,6 @@
+use core::f64;
 use std::sync::{Arc, Mutex};
+use std::fmt::Write; 
 
 use axum::{extract::State, routing::get, Router};
 use sysinfo::System;
@@ -14,6 +16,7 @@ async fn main() {
     let router = Router::new()
         .route("/", get(root_route))
         .route("/cpu", get(cpu_usage))
+        .route("/mem", get(mem_usage))
         .with_state(AppState {
             sys: Arc::new(Mutex::new(System::new_all()))
         });
@@ -30,7 +33,6 @@ async fn root_route() -> &'static str {
 }
 
 async fn cpu_usage(State(state): State<AppState>) -> String {
-    use std::fmt::Write; 
     let mut s = String::new();
     let mut sys = state.sys.lock().unwrap();
     sys.refresh_cpu_usage();
@@ -39,6 +41,26 @@ async fn cpu_usage(State(state): State<AppState>) -> String {
         let i = i + 1;
         writeln!(s, "CPU {i}: {}%", cpu.cpu_usage()).unwrap();
     }
+
+    s
+}
+
+async fn mem_usage(State(state): State<AppState>) -> String {
+    let mut s = String::new();
+    let mut sys = state.sys.lock().unwrap();
+    sys.refresh_memory();
+
+    fn to_gb(v: u64) -> f64 {
+        v as f64 / (1024u64.pow(3) as f64)
+    }
+
+    let total = to_gb(sys.total_memory());
+    let free_mem = to_gb(sys.free_memory());
+    let used_mem = to_gb(sys.used_memory());
+
+    writeln!(s, "Total: {} GB", total).unwrap();
+    writeln!(s, "Free: {} GB", free_mem).unwrap();
+    writeln!(s, "Used: {} GB", used_mem).unwrap();
 
     s
 }
