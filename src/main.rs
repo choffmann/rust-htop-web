@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket};
@@ -10,7 +11,11 @@ use sysinfo::{System, MINIMUM_CPU_UPDATE_INTERVAL};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-type Snapshot = Vec<f32>;
+#[derive(Clone)]
+struct Snapshot {
+    cpus: Vec<f32>,
+    processes: HashMap<u32, String>
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -30,14 +35,24 @@ async fn main() {
         .route("/index.css", get(indexcss_route))
         .route("/api/cpu", get(cpu_usage))
         .route("/realtime/cpu", get(realtime_cpu_usage))
+        .route("/realtime/process", get(realtime_process))
         .with_state(app_state.clone());
 
     tokio::task::spawn_blocking(move || {
         let mut sys = System::new_all();
         loop {
             sys.refresh_cpu_usage();
+            sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            sys.processes();
             let usage: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
-            let _ = tx.send(usage);
+            let processes: HashMap<u32, String> = sys.processes().keys().fold(HashMap::new(), |mut acc, value| {
+                acc.entry(value.as_u32()).or_insert(sys.processes().get(value).map_or("".to_string(), |v| v.name().to_str().unwrap_or("").to_string()));
+                acc
+            });
+            let _ = tx.send(Snapshot{
+                cpus: usage,
+                processes,
+            });
 
             std::thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL)
         }
@@ -73,7 +88,7 @@ async fn indexcss_route() -> impl IntoResponse {
 
 async fn cpu_usage(State(state): State<AppState>) -> impl IntoResponse {
     let mut rx = state.tx.subscribe();
-    let value = rx.recv().await.unwrap_or(vec![]);
+    let value = rx.recv().await.map_or(vec![], |v| v.cpus);
     return Json(value)
 }
 
@@ -86,9 +101,23 @@ async fn realtime_cpu_usage(ws: WebSocketUpgrade, State(state): State<AppState>)
 async fn realtime_cpu_stream(app_state: AppState, mut ws: WebSocket) {
     let mut rx = app_state.tx.subscribe();
     while let Ok(msg) = rx.recv().await {
-        let payload = serde_json::to_string(&msg).unwrap();
+        let payload = serde_json::to_string(&msg.cpus).unwrap();
         ws.send(Message::Text(payload.into())).await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await
     }
 }
 
+async fn realtime_process(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |ws: WebSocket| async {
+        realtime_process_stream(state, ws).await
+    })
+}
+
+async fn realtime_process_stream(app_state: AppState, mut ws: WebSocket) {
+    let mut rx = app_state.tx.subscribe();
+    while let Ok(msg) = rx.recv().await {
+        let payload = serde_json::to_string(&msg.processes).unwrap();
+        ws.send(Message::Text(payload.into())).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await
+    }
+}

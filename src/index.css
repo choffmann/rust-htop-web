@@ -39,3 +39,14 @@ body {
 
   transition: width 0.1s;
 }
+
+.process-wrapper {
+  width: 20em;
+  height: 20em;
+}
+
+.process-table {
+  font-family: roboto;
+  height: 100%;
+  margin: 0.5em;
+}
