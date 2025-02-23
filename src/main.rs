@@ -2,6 +2,9 @@ use core::f64;
 use std::sync::{Arc, Mutex};
 use std::fmt::Write; 
 
+use axum::http::Response;
+use axum::response::{Html, IntoResponse};
+use axum::Json;
 use axum::{extract::State, routing::get, Router};
 use sysinfo::System;
 use tokio::net::TcpListener;
@@ -15,8 +18,9 @@ struct AppState {
 async fn main() {
     let router = Router::new()
         .route("/", get(root_route))
-        .route("/cpu", get(cpu_usage))
-        .route("/mem", get(mem_usage))
+        .route("/index.js", get(indexjs_route))
+        .route("/api/cpu", get(cpu_usage))
+        .route("/api/mem", get(mem_usage))
         .with_state(AppState {
             sys: Arc::new(Mutex::new(System::new_all()))
         });
@@ -28,24 +32,29 @@ async fn main() {
     axum::serve(listener, router).await.unwrap();
 }
 
-async fn root_route() -> &'static str {
-    "Hello World!"
+async fn root_route() -> impl IntoResponse {
+    let markup = tokio::fs::read_to_string("src/index.html").await.unwrap();
+    Html(markup)
 }
 
-async fn cpu_usage(State(state): State<AppState>) -> String {
-    let mut s = String::new();
+async fn indexjs_route() -> impl IntoResponse {
+    let markup = tokio::fs::read_to_string("src/index.js").await.unwrap();
+    Response::builder()
+        .header("Content-Type", "application/javascript;charset=utf-8")
+        .body(markup)
+        .unwrap()
+}
+
+async fn cpu_usage(State(state): State<AppState>) -> impl IntoResponse {
     let mut sys = state.sys.lock().unwrap();
     sys.refresh_cpu_usage();
 
-    for (i, cpu) in sys.cpus().iter().enumerate() {
-        let i = i + 1;
-        writeln!(s, "CPU {i}: {}%", cpu.cpu_usage()).unwrap();
-    }
+    let usage: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
 
-    s
+    Json(usage)
 }
 
-async fn mem_usage(State(state): State<AppState>) -> String {
+async fn mem_usage(State(state): State<AppState>) -> impl IntoResponse {
     let mut s = String::new();
     let mut sys = state.sys.lock().unwrap();
     sys.refresh_memory();
