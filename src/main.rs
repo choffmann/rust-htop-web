@@ -18,7 +18,8 @@ struct AppState {
 async fn main() {
     let router = Router::new()
         .route("/", get(root_route))
-        .route("/index.js", get(indexjs_route))
+        .route("/index.js", get(indexmjs_route))
+        .route("/index.css", get(indexcss_route))
         .route("/api/cpu", get(cpu_usage))
         .route("/api/mem", get(mem_usage))
         .with_state(AppState {
@@ -37,10 +38,18 @@ async fn root_route() -> impl IntoResponse {
     Html(markup)
 }
 
-async fn indexjs_route() -> impl IntoResponse {
+async fn indexmjs_route() -> impl IntoResponse {
     let markup = tokio::fs::read_to_string("src/index.mjs").await.unwrap();
     Response::builder()
         .header("Content-Type", "application/javascript;charset=utf-8")
+        .body(markup)
+        .unwrap()
+}
+
+async fn indexcss_route() -> impl IntoResponse {
+    let markup = tokio::fs::read_to_string("src/index.css").await.unwrap();
+    Response::builder()
+        .header("Content-Type", "text/css;charset=utf-8")
         .body(markup)
         .unwrap()
 }
