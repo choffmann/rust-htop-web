@@ -15,12 +15,11 @@ const App = (props) => {
   </div>`;
 };
 
-setInterval(async () => {
-  const response = await fetch("/api/cpu");
-  if (response.status != 200) {
-    throw new Error(`http error! status: ${response.status}`);
-  }
+let url = new URL("/realtime/cpu", window.location.href);
+url.protocol = url.protocol.replace("http", "ws");
+let ws = new WebSocket(url.href);
 
-  const json = await response.json();
+ws.onmessage = (e) => {
+  const json = JSON.parse(e.data);
   render(html`<${App} cpus=${json} />`, document.body);
-}, 200);
+};
