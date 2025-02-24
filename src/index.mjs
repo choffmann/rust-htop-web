@@ -2,17 +2,6 @@ import { h, render } from "https://esm.sh/preact";
 import htm from "https://esm.sh/htm";
 const html = htm.bind(h);
 
-//document.addEventListener("DOMContentLoaded", () => {
-//  let cpuWrapper = document.createElement("div");
-//  cpuWrapper.id = "cpu-wrapper";
-//
-//  let processWrapper = document.createElement("div");
-//  cpuWrapper.id = "process-wrapper";
-//
-//  document.body.appendChild(cpuWrapper);
-//  document.body.appendChild(processWrapper);
-//});
-
 const CpuUsage = (props) => {
   return html`<div class="cpu-container">
     ${props.cpus.map(
@@ -32,12 +21,16 @@ const ProcessList = (props) => {
       <tr>
         <th>PID</th>
         <th>Process name</th>
+        <th>CPU</th>
+        <th>Memory</th>
       </tr>
       ${Object.entries(props.process).map(
-        ([pid, pname]) => html`
+        ([pid, obj]) => html`
           <tr>
             <td>${pid}</td>
-            <td>${pname}</td>
+            <td>${obj.name}</td>
+            <td>${obj.cpu_usage.toFixed(2)}%</td>
+            <td>${(obj.memory / Math.pow(1024, 2)).toFixed(2)} mb</td>
           </tr>
         `,
       )}

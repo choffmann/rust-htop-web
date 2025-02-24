@@ -10,11 +10,19 @@ use axum::{extract::State, routing::get, Router};
 use sysinfo::{System, MINIMUM_CPU_UPDATE_INTERVAL};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
+use serde::Serialize;
+
+#[derive(Clone, Serialize)]
+struct Process {
+    cpu_usage: f32,
+    name: String,
+    memory: u64,
+}
 
 #[derive(Clone)]
 struct Snapshot {
     cpus: Vec<f32>,
-    processes: HashMap<u32, String>
+    processes: HashMap<u32, Process>
 }
 
 #[derive(Clone)]
@@ -45,8 +53,15 @@ async fn main() {
             sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
             sys.processes();
             let usage: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
-            let processes: HashMap<u32, String> = sys.processes().keys().fold(HashMap::new(), |mut acc, value| {
-                acc.entry(value.as_u32()).or_insert(sys.processes().get(value).map_or("".to_string(), |v| v.name().to_str().unwrap_or("").to_string()));
+            let processes: HashMap<u32, Process> = sys.processes().keys().fold(HashMap::new(), |mut acc, value| {
+                let v = sys.processes().get(value).unwrap();
+                acc.entry(value.as_u32()).or_insert(
+                    Process{
+                        name: v.name().to_str().unwrap().to_string(),
+                        cpu_usage: v.cpu_usage(),
+                        memory: v.memory(),
+                    }
+                );
                 acc
             });
             let _ = tx.send(Snapshot{
